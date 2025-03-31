@@ -8,6 +8,7 @@ const appState = {
     layouts: [],
     selectedLayout: null,
     editingMaterialId: null,
+    editingWindowId: null, // Добавляем ID редактируемого окна
     layoutMethod: 'hybrid' // default layout method
 };
 
@@ -18,6 +19,8 @@ const elements = {
     windowQuantity: document.getElementById('window-quantity'),
     swapDimensions: document.getElementById('swap-dimensions'),
     addWindow: document.getElementById('add-window'),
+    updateWindow: document.getElementById('update-window'), // Новая кнопка для обновления окна
+    cancelWindowEdit: document.getElementById('cancel-window-edit'), // Кнопка отмены редактирования
     importDimensions: document.getElementById('import-dimensions'),
     importButton: document.getElementById('import-button'),
     windowsList: document.getElementById('windows-list'),
@@ -83,6 +86,14 @@ function init() {
     elements.swapDimensions.addEventListener('click', swapDimensions);
     elements.addWindow.addEventListener('click', addWindow);
     elements.importButton.addEventListener('click', importDimensions);
+    
+    // Добавляем обработчики для кнопок редактирования окон
+    if (elements.updateWindow) {
+        elements.updateWindow.addEventListener('click', updateWindow);
+    }
+    if (elements.cancelWindowEdit) {
+        elements.cancelWindowEdit.addEventListener('click', cancelWindowEditing);
+    }
     
     // Project management
     elements.exportProject.addEventListener('click', exportProject);
@@ -436,6 +447,9 @@ function addWindow() {
     
     // Update UI
     updateUIAfterWindowsChange();
+    
+    // Если кнопки редактирования видны, скрываем их и показываем кнопку добавления
+    showAddWindowMode();
 }
 
 // Import dimensions from textarea
@@ -499,10 +513,16 @@ function renderWindowsList() {
             <td class="px-4 py-2">${window.quantity}</td>
             <td class="px-4 py-2">${window.area.toFixed(2)}</td>
             <td class="px-4 py-2">
-                <span class="delete-btn" data-id="${window.id}">🗑️</span>
+                <span class="edit-window-btn cursor-pointer mr-2 text-blue-500" data-id="${window.id}">✏️</span>
+                <span class="delete-btn cursor-pointer text-red-500" data-id="${window.id}">🗑️</span>
             </td>
         `;
         elements.windowsList.appendChild(row);
+    });
+    
+    // Add event listeners to edit buttons
+    document.querySelectorAll('.edit-window-btn').forEach(btn => {
+        btn.addEventListener('click', handleEditWindow);
     });
     
     // Add event listeners to delete buttons
@@ -918,45 +938,56 @@ function renderLayoutVisualization(layout) {
         <button class="zoom-fit-btn" title="Показать весь лист">⤢</button>
     `;
     
-    // Set dimensions
-    const wrapperWidth = 1000; // Фиксированная ширина wrapper
-    const wrapperHeight = 450; // Фиксированная высота wrapper
+    // Set fixed dimensions for wrapper
+    const wrapperWidth = 1000;
+    const wrapperHeight = 450;
     
-    // Установим размеры для wrapper
     visualizationWrapper.style.width = `${wrapperWidth}px`;
     visualizationWrapper.style.height = `${wrapperHeight}px`;
     
-    // Теперь film-roll будет иметь те же размеры, что и wrapper
-    // Стили для film-roll заданы через CSS width: 100% и height: 100%
+    // Устанавливаем film-roll того же размера, что и wrapper
+    rollContainer.style.width = `${wrapperWidth}px`;
+    rollContainer.style.height = `${wrapperHeight}px`;
     
-    // Переменные для масштабирования
-    let scale = 1.0; // Начальный масштаб
-    const minScale = 0.1; // Минимальный масштаб
-    const maxScale = 5.0; // Максимальный масштаб
+    // Длина рулона для расчетов масштаба
+    const displayLength = layout.totalLength;
     
-    // Переменные для перемещения
+    // Вычисляем базовый масштаб, чтобы весь раскрой помещался в контейнер
+    const fitScaleX = wrapperWidth / displayLength;
+    const fitScaleY = wrapperHeight / layout.rollWidth;
+    const fitScale = Math.min(fitScaleX, fitScaleY * 0.95);
+    
+    // Начальный масштаб - подгонка под контейнер
+    let scale = fitScale;
+    
+    // Ограничения масштаба
+    const minScale = Math.min(fitScale, 400 / displayLength);
+    const maxScale = Math.max(fitScale * 5, 0.5);
+    
+    // Переменные для перемещения внутри контейнера
     let isPanning = false;
     let startX, startY;
-    let panOffsetX = 0;
-    let panOffsetY = 0;
+    let contentOffsetX = 0;
+    let contentOffsetY = 0;
     
-    // Функция для обновления масштаба и размеров элементов внутри film-roll
-    function updateZoom() {
+    // Функция для обновления позиций элементов при изменении масштаба
+    function updateVisualization(newScale, center = false) {
+        // Применяем ограничения масштаба
+        newScale = Math.max(minScale, Math.min(newScale, maxScale));
+        
+        // Если масштаб фактически не изменился, выходим
+        if (Math.abs(scale - newScale) < 0.001) return;
+        
+        scale = newScale;
+        
         // Обновляем все прямоугольники окон
         const windowRects = rollContainer.querySelectorAll('.window-rect');
         windowRects.forEach((rect, index) => {
             const pos = layout.positions[index];
-            
-            // Расчет координат с учетом масштаба
-            const left = pos.y * scale;
-            const top = (layout.rollWidth - pos.width - pos.x) * scale;
-            const width = pos.height * scale;
-            const height = pos.width * scale;
-            
-            rect.style.left = `${left}px`;
-            rect.style.top = `${top}px`;
-            rect.style.width = `${width}px`;
-            rect.style.height = `${height}px`;
+            rect.style.left = `${pos.y * scale}px`;
+            rect.style.top = `${(layout.rollWidth - pos.width - pos.x) * scale}px`;
+            rect.style.width = `${pos.height * scale}px`;
+            rect.style.height = `${pos.width * scale}px`;
             
             // Обновляем размер шрифта метки
             const label = rect.querySelector('.window-rect-label');
@@ -970,7 +1001,7 @@ function renderLayoutVisualization(layout) {
             }
         });
         
-        // Очищаем и заново создаем индикаторы расстояния
+        // Очищаем и пересоздаем индикаторы расстояния
         const indicators = rollContainer.querySelectorAll('.edge-distance-indicator');
         indicators.forEach(indicator => indicator.remove());
         
@@ -978,23 +1009,52 @@ function renderLayoutVisualization(layout) {
             createEdgeIndicator(rollContainer, pos, layout, scale, 'top');
             createEdgeIndicator(rollContainer, pos, layout, scale, 'bottom');
         });
+        
+        // Центрируем содержимое если требуется
+        if (center) {
+            contentOffsetX = 0;
+            contentOffsetY = 0;
+            updateContentTransform();
+        }
     }
     
-    // Добавляем прямоугольники окон с начальным масштабом
+    // Функция для обновления трансформации содержимого
+    function updateContentTransform() {
+        // Получаем все элементы содержимого
+        const elements = rollContainer.querySelectorAll('.window-rect, .edge-distance-indicator');
+        
+        // Применяем трансформацию к каждому элементу
+        elements.forEach(el => {
+            el.style.transform = `translate(${contentOffsetX}px, ${contentOffsetY}px) scale(1)`;
+        });
+    }
+    
+    // Обработчик для кнопки "Показать весь лист"
+    function fitToContainer() {
+        // Сбрасываем смещение
+        contentOffsetX = 0;
+        contentOffsetY = 0;
+        
+        // Обновляем масштаб чтобы все поместилось
+        const currentFitScaleX = visualizationWrapper.clientWidth / displayLength;
+        const currentFitScaleY = visualizationWrapper.clientHeight / layout.rollWidth;
+        const newScale = Math.min(currentFitScaleX, currentFitScaleY * 0.95);
+        
+        updateVisualization(newScale, true);
+    }
+    
+    // Добавляем прямоугольники окон
     layout.positions.forEach((pos, index) => {
         const rect = document.createElement('div');
         rect.className = 'window-rect';
         
-        // Расчет координат для начального масштаба
-        const left = pos.y * scale;
-        const top = (layout.rollWidth - pos.width - pos.x) * scale;
-        const width = pos.height * scale;
-        const height = pos.width * scale;
+        // Поворачиваем координаты для горизонтальной визуализации
+        rect.style.left = `${pos.y * scale}px`;
+        rect.style.top = `${(layout.rollWidth - pos.width - pos.x) * scale}px`;
         
-        rect.style.left = `${left}px`;
-        rect.style.top = `${top}px`;
-        rect.style.width = `${width}px`;
-        rect.style.height = `${height}px`;
+        // Меняем местами ширину и высоту для повернутой визуализации
+        rect.style.width = `${pos.height * scale}px`;
+        rect.style.height = `${pos.width * scale}px`;
         
         // Добавляем метку с размерами
         const label = document.createElement('div');
@@ -1014,7 +1074,7 @@ function renderLayoutVisualization(layout) {
         rect.appendChild(label);
         rollContainer.appendChild(rect);
         
-        // Добавляем индикаторы расстояния
+        // Показываем индикаторы расстояния до верхнего и нижнего края
         createEdgeIndicator(rollContainer, pos, layout, scale, 'top');
         createEdgeIndicator(rollContainer, pos, layout, scale, 'bottom');
     });
@@ -1024,7 +1084,6 @@ function renderLayoutVisualization(layout) {
     panInstructions.className = 'pan-instructions';
     panInstructions.textContent = 'Перемещение: зажмите и двигайте мышью';
     
-    // Структура DOM
     visualizationWrapper.appendChild(rollContainer);
     visualizationContainer.appendChild(visualizationWrapper);
     visualizationWrapper.appendChild(zoomControls);
@@ -1048,26 +1107,31 @@ function renderLayoutVisualization(layout) {
     
     // Настраиваем функциональность перемещения
     visualizationWrapper.addEventListener('mousedown', function(e) {
-        // Игнорируем, если клик на кнопке или метке
-        if (e.target.tagName === 'BUTTON' || e.target.classList.contains('window-rect-label')) return;
+        // Игнорируем, если клик на кнопке
+        if (e.target.tagName === 'BUTTON') return;
         
         isPanning = true;
-        startX = e.clientX - panOffsetX;
-        startY = e.clientY - panOffsetY;
+        startX = e.clientX - contentOffsetX;
+        startY = e.clientY - contentOffsetY;
         visualizationWrapper.style.cursor = 'grabbing';
-        e.preventDefault(); // Предотвращаем выделение текста
+        e.preventDefault();
     });
     
     visualizationWrapper.addEventListener('mousemove', function(e) {
         if (!isPanning) return;
         
-        panOffsetX = e.clientX - startX;
-        panOffsetY = e.clientY - startY;
+        // Вычисляем новое смещение
+        const newOffsetX = e.clientX - startX;
+        const newOffsetY = e.clientY - startY;
         
-        rollContainer.style.transform = `scale(${scale}) translate(${panOffsetX / scale}px, ${panOffsetY / scale}px)`;
+        // Применяем новое смещение с учетом ограничений
+        contentOffsetX = newOffsetX;
+        contentOffsetY = newOffsetY;
+        
+        // Обновляем позицию всех элементов
+        updateContentTransform();
     });
     
-    // Функция завершения перемещения
     function endPanning() {
         isPanning = false;
         visualizationWrapper.style.cursor = 'grab';
@@ -1076,88 +1140,43 @@ function renderLayoutVisualization(layout) {
     visualizationWrapper.addEventListener('mouseup', endPanning);
     visualizationWrapper.addEventListener('mouseleave', endPanning);
     
-    // Обработчики кнопок масштабирования
+    // Настройка зума
     const zoomInBtn = visualizationWrapper.querySelector('.zoom-in-btn');
     const zoomOutBtn = visualizationWrapper.querySelector('.zoom-out-btn');
     const zoomResetBtn = visualizationWrapper.querySelector('.zoom-reset-btn');
     const zoomFitBtn = visualizationWrapper.querySelector('.zoom-fit-btn');
     
     zoomInBtn.addEventListener('click', () => {
-        scale = Math.min(maxScale, scale * 1.3);
-        updateZoom();
-        rollContainer.style.transform = `scale(${scale}) translate(${panOffsetX / scale}px, ${panOffsetY / scale}px)`;
+        updateVisualization(scale * 1.3);
     });
     
     zoomOutBtn.addEventListener('click', () => {
-        scale = Math.max(minScale, scale / 1.3);
-        updateZoom();
-        rollContainer.style.transform = `scale(${scale}) translate(${panOffsetX / scale}px, ${panOffsetY / scale}px)`;
+        updateVisualization(scale / 1.3);
     });
     
     zoomResetBtn.addEventListener('click', () => {
-        scale = 1.0;
-        panOffsetX = 0;
-        panOffsetY = 0;
-        updateZoom();
-        rollContainer.style.transform = `scale(${scale})`;
+        // Сбрасываем масштаб и позицию
+        contentOffsetX = 0;
+        contentOffsetY = 0;
+        updateVisualization(fitScale, true);
     });
     
-    zoomFitBtn.addEventListener('click', () => {
-        // Определяем масштаб для размещения всего содержимого
-        const totalWidth = layout.totalLength;
-        const totalHeight = layout.rollWidth;
-        
-        const scaleX = wrapperWidth / totalWidth;
-        const scaleY = wrapperHeight / totalHeight;
-        
-        // Используем минимальный масштаб чтобы всё поместилось
-        scale = Math.min(scaleX, scaleY) * 0.95; // 5% отступ для читаемости
-        
-        // Обновляем позицию чтобы центрировать содержимое
-        panOffsetX = (wrapperWidth - totalWidth * scale) / 2;
-        panOffsetY = (wrapperHeight - totalHeight * scale) / 2;
-        
-        updateZoom();
-        rollContainer.style.transform = `scale(${scale}) translate(${panOffsetX / scale}px, ${panOffsetY / scale}px)`;
-    });
+    zoomFitBtn.addEventListener('click', fitToContainer);
     
-    // Поддержка масштабирования колесиком мыши
+    // Добавляем поддержку масштабирования колесиком мыши
     visualizationWrapper.addEventListener('wheel', (e) => {
-        e.preventDefault(); // Предотвращаем прокрутку страницы
+        e.preventDefault();
         
-        // Определяем направление прокрутки
-        const delta = e.deltaY || e.detail || e.wheelDelta;
+        // Вычисляем новый масштаб
+        const delta = e.deltaY;
+        const factor = delta > 0 ? 0.9 : 1.1;
+        const newScale = scale * factor;
         
-        // Рассчитываем новый масштаб
-        const scaleFactor = delta > 0 ? 0.9 : 1.1;
-        const newScale = Math.max(minScale, Math.min(maxScale, scale * scaleFactor));
-        
-        // Если масштаб не изменился (достигли минимума или максимума), выходим
-        if (newScale === scale) return;
-        
-        // Позиция мыши относительно wrapper
-        const rect = visualizationWrapper.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        
-        // Позиция мыши относительно текущего положения content
-        const contentX = (mouseX - panOffsetX) / scale;
-        const contentY = (mouseY - panOffsetY) / scale;
-        
-        // Обновляем смещение, чтобы точка под курсором осталась на месте
-        panOffsetX = mouseX - contentX * newScale;
-        panOffsetY = mouseY - contentY * newScale;
-        
-        // Обновляем масштаб
-        scale = newScale;
-        updateZoom();
-        
-        // Применяем новую трансформацию
-        rollContainer.style.transform = `scale(${scale}) translate(${panOffsetX / scale}px, ${panOffsetY / scale}px)`;
+        updateVisualization(newScale);
     }, { passive: false });
     
-    // Начальная подгонка всего содержимого в видимую область
-    zoomFitBtn.click();
+    // Начальная подгонка содержимого
+    fitToContainer();
     
     // Добавляем анимацию с anime.js если доступно
     if (typeof anime !== 'undefined') {
@@ -1480,6 +1499,98 @@ function updateLayoutMethodOptions() {
     }
     
     layoutMethodSelect.value = appState.layoutMethod;
+}
+
+// Обработчик нажатия на кнопку редактирования окна
+function handleEditWindow(event) {
+    const windowId = parseInt(event.target.dataset.id);
+    const window = appState.windows.find(w => w.id === windowId);
+    
+    if (window) {
+        // Заполняем форму данными окна
+        elements.windowWidth.value = window.width;
+        elements.windowHeight.value = window.height;
+        elements.windowQuantity.value = window.quantity;
+        
+        // Показываем кнопки редактирования и скрываем кнопку добавления
+        showEditWindowMode();
+        
+        // Запоминаем ID редактируемого окна
+        appState.editingWindowId = windowId;
+    }
+}
+
+// Функция обновления существующего окна
+function updateWindow() {
+    if (!appState.editingWindowId) {
+        alert('Ошибка: окно для редактирования не выбрано');
+        return;
+    }
+    
+    const width = parseInt(elements.windowWidth.value);
+    const height = parseInt(elements.windowHeight.value);
+    const quantity = parseInt(elements.windowQuantity.value);
+    
+    if (!width || !height || !quantity) {
+        alert('Пожалуйста, заполните все поля корректно');
+        return;
+    }
+    
+    // Находим индекс окна в массиве
+    const windowIndex = appState.windows.findIndex(w => w.id === appState.editingWindowId);
+    
+    if (windowIndex !== -1) {
+        // Обновляем данные окна
+        appState.windows[windowIndex] = {
+            ...appState.windows[windowIndex],
+            width,
+            height,
+            quantity,
+            area: calculateWindowArea(width, height, quantity)
+        };
+        
+        // Сбрасываем форму и режим редактирования
+        cancelWindowEditing();
+        
+        // Обновляем интерфейс
+        updateUIAfterWindowsChange();
+    }
+}
+
+// Отменить редактирование окна
+function cancelWindowEditing() {
+    // Сбрасываем форму
+    elements.windowWidth.value = '';
+    elements.windowHeight.value = '';
+    elements.windowQuantity.value = '1';
+    
+    // Показываем режим добавления
+    showAddWindowMode();
+    
+    // Очищаем ID редактируемого окна
+    appState.editingWindowId = null;
+}
+
+// Переключиться в режим добавления окна
+function showAddWindowMode() {
+    if (elements.updateWindow) {
+        elements.updateWindow.classList.add('hidden');
+    }
+    if (elements.cancelWindowEdit) {
+        elements.cancelWindowEdit.classList.add('hidden');
+    }
+    elements.addWindow.classList.remove('hidden');
+}
+
+// Переключиться в режим редактирования окна
+function showEditWindowMode() {
+    elements.addWindow.classList.add('hidden');
+    if (elements.updateWindow) {
+        elements.updateWindow.classList.remove('hidden');
+    }
+    if (elements.cancelWindowEdit) {
+        elements.cancelWindowEdit.classList.remove('hidden');
+    }
 }
 
 // Initialize the application when DOM is loaded
