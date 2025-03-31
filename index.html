@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Калькулятор раскроя пленки</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="css/styles.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <h1 class="text-2xl font-bold mb-4">Калькулятор раскроя пленки</h1>
+        
+        <!-- Форма ввода данных (InputForm) -->
+        <div class="bg-white p-4 rounded shadow mb-4">
+            <h2 class="text-xl font-semibold mb-2">Ввод размеров окна</h2>
+            <div class="flex flex-wrap gap-2 mb-4">
+                <div>
+                    <label for="window-width" class="block text-sm font-medium text-gray-700">Ширина (мм)</label>
+                    <input type="number" id="window-width" class="mt-1 p-2 border rounded" min="1">
+                </div>
+                <div>
+                    <label for="window-height" class="block text-sm font-medium text-gray-700">Высота (мм)</label>
+                    <input type="number" id="window-height" class="mt-1 p-2 border rounded" min="1">
+                </div>
+                <div>
+                    <label for="window-quantity" class="block text-sm font-medium text-gray-700">Количество</label>
+                    <input type="number" id="window-quantity" class="mt-1 p-2 border rounded" min="1" value="1">
+                </div>
+                <div class="flex items-end">
+                    <button id="swap-dimensions" class="bg-gray-200 p-2 rounded hover:bg-gray-300">
+                        <span>↔️ Поменять Ш/В</span>
+                    </button>
+                </div>
+                <div class="flex items-end">
+                    <button id="add-window" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">
+                        Добавить деталь
+                    </button>
+                </div>
+            </div>
+            
+            <div class="mb-4">
+                <label for="import-dimensions" class="block text-sm font-medium text-gray-700">Импорт размеров (формат: ширина;высота;количество, по одной записи на строку)</label>
+                <textarea id="import-dimensions" class="w-full mt-1 p-2 border rounded" rows="4"></textarea>
+                <button id="import-button" class="mt-2 bg-green-500 text-white p-2 rounded hover:bg-green-600">
+                    Импортировать
+                </button>
+            </div>
+        </div>
+        
+        <!-- Список окон (WindowList) -->
+        <div class="bg-white p-4 rounded shadow mb-4">
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="text-xl font-semibold">Список окон</h2>
+                <div class="flex gap-2">
+                    <button id="export-project" class="bg-indigo-500 text-white p-2 rounded hover:bg-indigo-600">
+                        💾 Экспорт проекта
+                    </button>
+                    <button id="import-project" class="bg-indigo-500 text-white p-2 rounded hover:bg-indigo-600">
+                        📂 Импорт проекта
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full table-auto">
+                    <thead>
+                        <tr class="bg-gray-200">
+                            <th class="px-4 py-2">№</th>
+                            <th class="px-4 py-2">Ширина (мм)</th>
+                            <th class="px-4 py-2">Высота (мм)</th>
+                            <th class="px-4 py-2">Количество</th>
+                            <th class="px-4 py-2">Площадь (м²)</th>
+                            <th class="px-4 py-2">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="windows-list">
+                        <!-- JavaScript will populate this -->
+                    </tbody>
+                    <tfoot>
+                        <tr class="bg-gray-100">
+                            <td colspan="4" class="px-4 py-2 font-bold text-right">Общая площадь:</td>
+                            <td id="total-area" class="px-4 py-2 font-bold">0 м²</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Раскрой и Визуализация -->
+        <div class="bg-white p-4 rounded shadow mb-4">
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="text-xl font-semibold">Оптимальный раскрой</h2>
+                <div class="flex gap-2 items-center">
+                    <label for="layout-method" class="text-sm font-medium text-gray-700 mb-1">Метод раскроя:</label>
+                    <select id="layout-method" class="w-full border rounded p-2">
+                        <option value="guillotine">Гильотинный (простые прямые резы)</option>
+                        <option value="optimal">Максимально эффективный (сложные резы)</option>
+                        <option value="hybrid" selected>Гибридный (оптимальный баланс)</option>
+                        <option value="first-fit">First-Fit (жадный алгоритм)</option>
+                        <option value="best-fit">Best-Fit (оптимизированный жадный)</option>
+                        <option value="skyline">Skyline (контурный раскрой)</option>
+                        <option value="strip-packing">Strip Packing (специализированный для рулонов)</option>
+                    </select>
+                    <button id="compare-methods" class="mt-2 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
+                        Сравнить все методы
+                    </button>
+                </div>
+            </div>
+            <div id="layout-results">
+                <p class="text-gray-500 italic">Добавьте окна для расчета раскроя</p>
+            </div>
+            
+            <div class="mt-4">
+                <h3 class="text-lg font-semibold mb-2">Визуализация раскроя</h3>
+                <div id="layout-visualization" class="border p-2">
+                    <!-- Canvas для визуализации будет добавлен через JavaScript -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Смета (Estimate) -->
+        <div class="bg-white p-4 rounded shadow mb-4">
+            <h2 class="text-xl font-semibold mb-2">Расчет стоимости</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label for="material-selector" class="block text-sm font-medium text-gray-700">Тип пленки</label>
+                    <select id="material-selector" class="mt-1 p-2 border rounded w-full">
+                        <!-- JavaScript will populate this -->
+                    </select>
+                </div>
+                <div>
+                    <label for="work-price" class="block text-sm font-medium text-gray-700">Стоимость работ (грн/м²)</label>
+                    <input type="number" id="work-price" class="mt-1 p-2 border rounded w-full" value="250">
+                </div>
+                <div>
+                    <label for="delivery-price" class="block text-sm font-medium text-gray-700">Стоимость доставки (грн)</label>
+                    <input type="number" id="delivery-price" class="mt-1 p-2 border rounded w-full" value="0">
+                </div>
+            </div>
+            
+            <div id="estimate-display">
+                <!-- JavaScript will populate this -->
+                <p class="text-gray-500 italic">Добавьте окна для расчета стоимости</p>
+            </div>
+        </div>
+        
+        <!-- Настройки (Settings) -->
+        <div class="bg-white p-4 rounded shadow mb-4">
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="text-xl font-semibold">Настройки материалов</h2>
+                <button id="toggle-settings" class="bg-gray-200 p-2 rounded hover:bg-gray-300">
+                    <span id="toggle-settings-text">Показать настройки</span>
+                </button>
+            </div>
+            
+            <div id="settings-panel" class="hidden">
+                <div class="mb-4">
+                    <h3 class="text-lg font-semibold mb-2">Доступные материалы</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full table-auto">
+                            <thead>
+                                <tr class="bg-gray-200">
+                                    <th class="px-4 py-2">Название</th>
+                                    <th class="px-4 py-2">Цена (грн/м²)</th>
+                                    <th class="px-4 py-2">Доступные ширины (мм)</th>
+                                    <th class="px-4 py-2">Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="materials-list">
+                                <!-- JavaScript will populate this -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="p-4 border rounded bg-gray-50">
+                    <h3 class="text-lg font-semibold mb-2">Добавить/редактировать материал</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label for="material-name" class="block text-sm font-medium text-gray-700">Название</label>
+                            <input type="text" id="material-name" class="mt-1 p-2 border rounded w-full">
+                        </div>
+                        <div>
+                            <label for="material-price" class="block text-sm font-medium text-gray-700">Цена (грн/м²)</label>
+                            <input type="number" id="material-price" class="mt-1 p-2 border rounded w-full" min="0.01" step="0.01">
+                        </div>
+                        <div>
+                            <label for="material-widths" class="block text-sm font-medium text-gray-700">Ширины рулонов (через запятую, мм)</label>
+                            <input type="text" id="material-widths" class="mt-1 p-2 border rounded w-full" placeholder="1524, 1830">
+                        </div>
+                    </div>
+                    <div class="mt-3 flex gap-2">
+                        <button id="add-material" class="bg-green-500 text-white p-2 rounded hover:bg-green-600">
+                            Добавить материал
+                        </button>
+                        <button id="update-material" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600 hidden">
+                            Обновить материал
+                        </button>
+                        <button id="cancel-edit" class="bg-gray-500 text-white p-2 rounded hover:bg-gray-600 hidden">
+                            Отменить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Подключение скриптов -->
+    <script src="js/defaultData.js"></script>
+    <script src="js/layoutAlgorithms.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
