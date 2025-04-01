@@ -8,9 +8,161 @@ const appState = {
     layouts: [],
     selectedLayout: null,
     editingMaterialId: null,
-    editingWindowId: null, // Добавляем ID редактируемого окна
     layoutMethod: 'hybrid' // default layout method
 };
+
+// Add custom CSS for enhanced visualization
+function addCustomStyles() {
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+        .film-roll {
+            background-color: #f0f8ff;
+            border: 2px solid #2c3e50;
+            position: relative;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-top: 15px;
+        }
+        
+        .window-rect {
+            background-color: rgba(52, 152, 219, 0.7);
+            border: 2px solid #2980b9;
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transition: all 0.2s ease;
+            z-index: 10;
+        }
+        
+        .window-rect:hover {
+            background-color: rgba(52, 152, 219, 0.9);
+            transform: scale(1.02);
+            z-index: 20;
+        }
+        
+        .window-rect-label {
+            color: white;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+            white-space: nowrap;
+        }
+        
+        .edge-distance-indicator {
+            position: absolute;
+            background-color: rgba(231, 76, 60, 0.25);
+            border: 1px dashed rgba(231, 76, 60, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+        }
+        
+        .edge-distance-indicator:hover {
+            background-color: rgba(231, 76, 60, 0.4);
+        }
+        
+        .edge-distance-label {
+            background-color: rgba(231, 76, 60, 0.8);
+            color: white;
+            border-radius: 3px;
+            padding: 2px 4px;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        
+        /* Специальные стили для индикаторов боковых сторон */
+        .top-indicator, .bottom-indicator {
+            background-color: rgba(230, 126, 34, 0.25);
+            border: 1px dashed rgba(230, 126, 34, 0.8);
+        }
+        
+        .top-indicator:hover, .bottom-indicator:hover {
+            background-color: rgba(230, 126, 34, 0.4);
+        }
+        
+        .top-indicator .edge-distance-label, 
+        .bottom-indicator .edge-distance-label {
+            background-color: rgba(230, 126, 34, 0.9);
+            font-weight: bold;
+        }
+        
+        .visualization-wrapper {
+            border-radius: 5px;
+            background-color: #ecf0f1;
+            padding: 10px;
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+        
+        /* Zoom controls */
+        .zoom-controls {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 4px;
+            padding: 3px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .zoom-controls button {
+            width: 30px;
+            height: 30px;
+            margin: 2px;
+            border: none;
+            background-color: #3498db;
+            color: white;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            transition: all 0.2s ease;
+        }
+        
+        .zoom-controls button:hover {
+            background-color: #2980b9;
+            transform: scale(1.1);
+        }
+        
+        .zoom-reset-btn {
+            font-size: 16px !important;
+        }
+        
+        /* Ruler marks at top/left of visualization */
+        .film-roll::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: -10px;
+            width: 100%;
+            height: 10px;
+            background-image: linear-gradient(90deg, 
+                #2c3e50 1px, transparent 1px, 
+                transparent 9px, rgba(44, 62, 80, 0.5) 10px);
+            background-size: 10px 10px;
+            z-index: 1;
+        }
+        
+        .film-roll::after {
+            content: '';
+            position: absolute;
+            left: -10px;
+            top: 0;
+            width: 10px;
+            height: 100%;
+            background-image: linear-gradient(0deg, 
+                #2c3e50 1px, transparent 1px, 
+                transparent 9px, rgba(44, 62, 80, 0.5) 10px);
+            background-size: 10px 10px;
+            z-index: 1;
+        }
+    `;
+    document.head.appendChild(styleElement);
+}
 
 // DOM Elements
 const elements = {
@@ -19,8 +171,6 @@ const elements = {
     windowQuantity: document.getElementById('window-quantity'),
     swapDimensions: document.getElementById('swap-dimensions'),
     addWindow: document.getElementById('add-window'),
-    updateWindow: document.getElementById('update-window'), // Новая кнопка для обновления окна
-    cancelWindowEdit: document.getElementById('cancel-window-edit'), // Кнопка отмены редактирования
     importDimensions: document.getElementById('import-dimensions'),
     importButton: document.getElementById('import-button'),
     windowsList: document.getElementById('windows-list'),
@@ -60,6 +210,9 @@ function updateUIAfterWindowsChange() {
 
 // Initialize the application
 function init() {
+    // Add custom styles for visualization
+    addCustomStyles();
+    
     // Load saved materials from localStorage if available
     loadSavedMaterials();
     
@@ -86,14 +239,6 @@ function init() {
     elements.swapDimensions.addEventListener('click', swapDimensions);
     elements.addWindow.addEventListener('click', addWindow);
     elements.importButton.addEventListener('click', importDimensions);
-    
-    // Добавляем обработчики для кнопок редактирования окон
-    if (elements.updateWindow) {
-        elements.updateWindow.addEventListener('click', updateWindow);
-    }
-    if (elements.cancelWindowEdit) {
-        elements.cancelWindowEdit.addEventListener('click', cancelWindowEditing);
-    }
     
     // Project management
     elements.exportProject.addEventListener('click', exportProject);
@@ -447,9 +592,6 @@ function addWindow() {
     
     // Update UI
     updateUIAfterWindowsChange();
-    
-    // Если кнопки редактирования видны, скрываем их и показываем кнопку добавления
-    showAddWindowMode();
 }
 
 // Import dimensions from textarea
@@ -513,16 +655,10 @@ function renderWindowsList() {
             <td class="px-4 py-2">${window.quantity}</td>
             <td class="px-4 py-2">${window.area.toFixed(2)}</td>
             <td class="px-4 py-2">
-                <span class="edit-window-btn cursor-pointer mr-2 text-blue-500" data-id="${window.id}">✏️</span>
-                <span class="delete-btn cursor-pointer text-red-500" data-id="${window.id}">🗑️</span>
+                <span class="delete-btn" data-id="${window.id}">🗑️</span>
             </td>
         `;
         elements.windowsList.appendChild(row);
-    });
-    
-    // Add event listeners to edit buttons
-    document.querySelectorAll('.edit-window-btn').forEach(btn => {
-        btn.addEventListener('click', handleEditWindow);
     });
     
     // Add event listeners to delete buttons
@@ -916,14 +1052,6 @@ function renderLayoutVisualization(layout) {
     // Clear visualization area
     elements.layoutVisualization.innerHTML = '';
     
-    // Create main container
-    const visualizationContainer = document.createElement('div');
-    visualizationContainer.className = 'visualization-container';
-    
-    // Create a wrapper to allow panning
-    const visualizationWrapper = document.createElement('div');
-    visualizationWrapper.className = 'visualization-wrapper';
-    
     // Create a canvas container for the film roll
     const rollContainer = document.createElement('div');
     rollContainer.className = 'film-roll';
@@ -935,52 +1063,40 @@ function renderLayoutVisualization(layout) {
         <button class="zoom-in-btn" title="Увеличить">+</button>
         <button class="zoom-out-btn" title="Уменьшить">-</button>
         <button class="zoom-reset-btn" title="Сбросить масштаб">↺</button>
-        <button class="zoom-fit-btn" title="Показать весь лист">⤢</button>
     `;
     
-    // Set fixed dimensions for wrapper
-    const wrapperWidth = 1000;
-    const wrapperHeight = 450;
+    // Set dimensions (scale down if needed)
+    const maxDisplayWidth = 1200; // Increased from 900 to make visualization wider
+    const maxDisplayHeight = 450; // Slightly increased height as well
     
-    visualizationWrapper.style.width = `${wrapperWidth}px`;
-    visualizationWrapper.style.height = `${wrapperHeight}px`;
-    
-    // Устанавливаем film-roll того же размера, что и wrapper
-    rollContainer.style.width = `${wrapperWidth}px`;
-    rollContainer.style.height = `${wrapperHeight}px`;
-    
-    // Длина рулона для расчетов масштаба
+    // Rotate the layout to horizontal orientation by swapping width and height
     const displayLength = layout.totalLength;
     
-    // Вычисляем базовый масштаб, чтобы весь раскрой помещался в контейнер
-    const fitScaleX = wrapperWidth / displayLength;
-    const fitScaleY = wrapperHeight / layout.rollWidth;
-    const fitScale = Math.min(fitScaleX, fitScaleY * 0.95);
+    // Calculate the scale to fit the visualization horizontally
+    // Prioritize filling the width when possible
+    const scaleX = Math.min(1, maxDisplayWidth / displayLength);
+    const scaleY = Math.min(1, maxDisplayHeight / layout.rollWidth);
+    let scale = Math.min(scaleX, scaleY * 1.1); // Give slight preference to horizontal scaling
     
-    // Начальный масштаб - подгонка под контейнер
-    let scale = fitScale;
+    // Store original scale for zoom reset
+    const originalScale = scale;
     
-    // Ограничения масштаба
-    const minScale = Math.min(fitScale, 400 / displayLength);
-    const maxScale = Math.max(fitScale * 5, 0.5);
+    // Create a wrapper with horizontal scrolling if needed
+    const visualizationWrapper = document.createElement('div');
+    visualizationWrapper.className = 'visualization-wrapper';
+    visualizationWrapper.style.overflowX = 'auto';
+    visualizationWrapper.style.width = '100%';
+    visualizationWrapper.style.paddingBottom = '10px'; // Space for scrollbar
     
-    // Переменные для перемещения внутри контейнера
-    let isPanning = false;
-    let startX, startY;
-    let contentOffsetX = 0;
-    let contentOffsetY = 0;
-    
-    // Функция для обновления позиций элементов при изменении масштаба
-    function updateVisualization(newScale, center = false) {
-        // Применяем ограничения масштаба
-        newScale = Math.max(minScale, Math.min(newScale, maxScale));
-        
-        // Если масштаб фактически не изменился, выходим
-        if (Math.abs(scale - newScale) < 0.001) return;
-        
+    // Function to update the visualization with a new scale
+    function updateVisualization(newScale) {
         scale = newScale;
         
-        // Обновляем все прямоугольники окон
+        // Update roll container dimensions
+    rollContainer.style.width = `${displayLength * scale}px`;
+    rollContainer.style.height = `${layout.rollWidth * scale}px`;
+        
+        // Update all window rectangles and indicators
         const windowRects = rollContainer.querySelectorAll('.window-rect');
         windowRects.forEach((rect, index) => {
             const pos = layout.positions[index];
@@ -988,199 +1104,113 @@ function renderLayoutVisualization(layout) {
             rect.style.top = `${(layout.rollWidth - pos.width - pos.x) * scale}px`;
             rect.style.width = `${pos.height * scale}px`;
             rect.style.height = `${pos.width * scale}px`;
-            
-            // Обновляем размер шрифта метки
-            const label = rect.querySelector('.window-rect-label');
-            const minDimension = Math.min(pos.width, pos.height);
-            if (minDimension * scale < 50) {
-                label.style.fontSize = '10px';
-            } else if (minDimension * scale > 120) {
-                label.style.fontSize = '16px';
-            } else {
-                label.style.fontSize = '14px';
-            }
         });
         
-        // Очищаем и пересоздаем индикаторы расстояния
+        // Clear and recreate all edge indicators
         const indicators = rollContainer.querySelectorAll('.edge-distance-indicator');
         indicators.forEach(indicator => indicator.remove());
         
         layout.positions.forEach(pos => {
+            // Показываем только индикаторы расстояния до боковых краёв (верх и низ)
             createEdgeIndicator(rollContainer, pos, layout, scale, 'top');
             createEdgeIndicator(rollContainer, pos, layout, scale, 'bottom');
         });
-        
-        // Центрируем содержимое если требуется
-        if (center) {
-            contentOffsetX = 0;
-            contentOffsetY = 0;
-            updateContentTransform();
-        }
     }
     
-    // Функция для обновления трансформации содержимого
-    function updateContentTransform() {
-        // Получаем все элементы содержимого
-        const elements = rollContainer.querySelectorAll('.window-rect, .edge-distance-indicator');
-        
-        // Применяем трансформацию к каждому элементу
-        elements.forEach(el => {
-            el.style.transform = `translate(${contentOffsetX}px, ${contentOffsetY}px) scale(1)`;
-        });
-    }
+    // Set initial dimensions
+    rollContainer.style.width = `${displayLength * scale}px`;
+    rollContainer.style.height = `${layout.rollWidth * scale}px`;
+    rollContainer.style.maxWidth = '100%'; // Ensure it doesn't overflow container
+    rollContainer.style.overflowX = 'auto'; // Add horizontal scrolling if needed
     
-    // Обработчик для кнопки "Показать весь лист"
-    function fitToContainer() {
-        // Сбрасываем смещение
-        contentOffsetX = 0;
-        contentOffsetY = 0;
-        
-        // Обновляем масштаб чтобы все поместилось
-        const currentFitScaleX = visualizationWrapper.clientWidth / displayLength;
-        const currentFitScaleY = visualizationWrapper.clientHeight / layout.rollWidth;
-        const newScale = Math.min(currentFitScaleX, currentFitScaleY * 0.95);
-        
-        updateVisualization(newScale, true);
-    }
-    
-    // Добавляем прямоугольники окон
+    // Add the window rectangles
     layout.positions.forEach((pos, index) => {
         const rect = document.createElement('div');
         rect.className = 'window-rect';
         
-        // Поворачиваем координаты для горизонтальной визуализации
+        // Rotate coordinates for horizontal visualization (original y becomes x, x becomes y but inverted)
         rect.style.left = `${pos.y * scale}px`;
         rect.style.top = `${(layout.rollWidth - pos.width - pos.x) * scale}px`;
         
-        // Меняем местами ширину и высоту для повернутой визуализации
+        // Swap width and height for the rotated visualization
         rect.style.width = `${pos.height * scale}px`;
         rect.style.height = `${pos.width * scale}px`;
         
-        // Добавляем метку с размерами
+        // Add label with dimensions - make font size responsive to rectangle size
         const label = document.createElement('div');
         label.className = 'window-rect-label';
         label.textContent = `${pos.width}×${pos.height}`;
         
-        // Регулируем размер шрифта в зависимости от размера прямоугольника
+        // Adjust font size based on rectangle size for better readability
         const minDimension = Math.min(pos.width, pos.height);
         if (minDimension * scale < 50) {
             label.style.fontSize = '10px';
         } else if (minDimension * scale > 120) {
-            label.style.fontSize = '16px';
-        } else {
             label.style.fontSize = '14px';
         }
         
         rect.appendChild(label);
+        
+        // Add the main rectangle to the container
         rollContainer.appendChild(rect);
         
-        // Показываем индикаторы расстояния до верхнего и нижнего края
+        // Показываем только индикаторы расстояния до боковых краёв (верх и низ)
         createEdgeIndicator(rollContainer, pos, layout, scale, 'top');
         createEdgeIndicator(rollContainer, pos, layout, scale, 'bottom');
     });
     
-    // Добавляем инструкции по перемещению
-    const panInstructions = document.createElement('div');
-    panInstructions.className = 'pan-instructions';
-    panInstructions.textContent = 'Перемещение: зажмите и двигайте мышью';
-    
     visualizationWrapper.appendChild(rollContainer);
-    visualizationContainer.appendChild(visualizationWrapper);
     visualizationWrapper.appendChild(zoomControls);
-    visualizationWrapper.appendChild(panInstructions);
     
-    // Добавляем секцию с информацией о визуализации
-    const visualizationInfo = document.createElement('div');
-    visualizationInfo.className = 'visualization-info';
-    visualizationInfo.innerHTML = `
-        <div><strong>Ширина рулона:</strong> ${layout.rollWidth} мм</div>
-        <div><strong>Длина раскроя:</strong> ${layout.totalLength} мм (${(layout.totalLength / 1000).toFixed(2)} м)</div>
-        <div><strong>Длина для закупки:</strong> ${layout.purchaseLength.toFixed(1)} м</div>
-        <div>* Оранжевые индикаторы показывают расстояние до края рулона</div>
+    // Add scale/dimensions indicator
+    const scaleIndicator = document.createElement('div');
+    scaleIndicator.className = 'mt-2 text-sm';
+    scaleIndicator.innerHTML = `
+        <div>Ширина рулона: ${layout.rollWidth} мм</div>
+        <div>Длина раскроя: ${layout.totalLength} мм (${(layout.totalLength / 1000).toFixed(2)} м)</div>
+        <div>Длина для закупки: ${layout.purchaseLength.toFixed(1)} м</div>
+        <div class="mt-2 text-xs text-gray-500">* Оранжевые индикаторы показывают расстояние до верхнего и нижнего края рулона</div>
     `;
     
-    // Добавляем к контейнеру
-    visualizationContainer.appendChild(visualizationInfo);
+    // Append to visualization area
+    elements.layoutVisualization.appendChild(visualizationWrapper);
+    elements.layoutVisualization.appendChild(scaleIndicator);
     
-    // Добавляем к области визуализации
-    elements.layoutVisualization.appendChild(visualizationContainer);
-    
-    // Настраиваем функциональность перемещения
-    visualizationWrapper.addEventListener('mousedown', function(e) {
-        // Игнорируем, если клик на кнопке
-        if (e.target.tagName === 'BUTTON') return;
-        
-        isPanning = true;
-        startX = e.clientX - contentOffsetX;
-        startY = e.clientY - contentOffsetY;
-        visualizationWrapper.style.cursor = 'grabbing';
-        e.preventDefault();
-    });
-    
-    visualizationWrapper.addEventListener('mousemove', function(e) {
-        if (!isPanning) return;
-        
-        // Вычисляем новое смещение
-        const newOffsetX = e.clientX - startX;
-        const newOffsetY = e.clientY - startY;
-        
-        // Применяем новое смещение с учетом ограничений
-        contentOffsetX = newOffsetX;
-        contentOffsetY = newOffsetY;
-        
-        // Обновляем позицию всех элементов
-        updateContentTransform();
-    });
-    
-    function endPanning() {
-        isPanning = false;
-        visualizationWrapper.style.cursor = 'grab';
-    }
-    
-    visualizationWrapper.addEventListener('mouseup', endPanning);
-    visualizationWrapper.addEventListener('mouseleave', endPanning);
-    
-    // Настройка зума
+    // Add zoom functionality
     const zoomInBtn = visualizationWrapper.querySelector('.zoom-in-btn');
     const zoomOutBtn = visualizationWrapper.querySelector('.zoom-out-btn');
     const zoomResetBtn = visualizationWrapper.querySelector('.zoom-reset-btn');
-    const zoomFitBtn = visualizationWrapper.querySelector('.zoom-fit-btn');
     
     zoomInBtn.addEventListener('click', () => {
-        updateVisualization(scale * 1.3);
+        updateVisualization(scale * 1.2);
     });
     
     zoomOutBtn.addEventListener('click', () => {
-        updateVisualization(scale / 1.3);
+        updateVisualization(scale / 1.2);
     });
     
     zoomResetBtn.addEventListener('click', () => {
-        // Сбрасываем масштаб и позицию
-        contentOffsetX = 0;
-        contentOffsetY = 0;
-        updateVisualization(fitScale, true);
+        updateVisualization(originalScale);
     });
     
-    zoomFitBtn.addEventListener('click', fitToContainer);
-    
-    // Добавляем поддержку масштабирования колесиком мыши
+    // Add mouse wheel zoom support
     visualizationWrapper.addEventListener('wheel', (e) => {
+        // Prevent the page from scrolling
         e.preventDefault();
         
-        // Вычисляем новый масштаб
-        const delta = e.deltaY;
-        const factor = delta > 0 ? 0.9 : 1.1;
-        const newScale = scale * factor;
-        
-        updateVisualization(newScale);
+        // Determine zoom direction
+        if (e.deltaY < 0) {
+            // Zoom in (scroll up)
+            updateVisualization(scale * 1.1);
+        } else {
+            // Zoom out (scroll down)
+            updateVisualization(scale / 1.1);
+        }
     }, { passive: false });
     
-    // Начальная подгонка содержимого
-    fitToContainer();
-    
-    // Добавляем анимацию с anime.js если доступно
+    // Add animation with anime.js
     if (typeof anime !== 'undefined') {
-        // Анимируем появление окон
+        // Animate the windows appearing
         const windowElements = rollContainer.querySelectorAll('.window-rect');
         anime({
             targets: windowElements,
@@ -1191,7 +1221,7 @@ function renderLayoutVisualization(layout) {
             easing: 'easeOutCubic'
         });
         
-        // Анимируем индикаторы расстояния
+        // Animate the edge distance indicators
         const indicatorElements = rollContainer.querySelectorAll('.edge-distance-indicator');
         anime({
             targets: indicatorElements,
@@ -1451,8 +1481,8 @@ function compareAllMethods() {
         return;
     }
     
-    // Используем все доступные ширины рулонов для сравнения
-    // Раньше было только: const singleRollWidth = [rollWidths[0]];
+    // Use first roll width for comparison
+    const singleRollWidth = [rollWidths[0]];
     
     // List of available methods
     const availableMethods = [
@@ -1461,8 +1491,8 @@ function compareAllMethods() {
         'advanced-guillotine'
     ];
     
-    // Create layout calculations for each method and each roll width
-    createLayoutsAndSelectFirst(rollWidths, availableMethods, appState.windows);
+    // Create layout calculations for each method
+    createLayoutsAndSelectFirst(singleRollWidth, availableMethods, appState.windows);
     
     // Update estimate calculation
     calculateEstimate();
@@ -1499,98 +1529,6 @@ function updateLayoutMethodOptions() {
     }
     
     layoutMethodSelect.value = appState.layoutMethod;
-}
-
-// Обработчик нажатия на кнопку редактирования окна
-function handleEditWindow(event) {
-    const windowId = parseInt(event.target.dataset.id);
-    const window = appState.windows.find(w => w.id === windowId);
-    
-    if (window) {
-        // Заполняем форму данными окна
-        elements.windowWidth.value = window.width;
-        elements.windowHeight.value = window.height;
-        elements.windowQuantity.value = window.quantity;
-        
-        // Показываем кнопки редактирования и скрываем кнопку добавления
-        showEditWindowMode();
-        
-        // Запоминаем ID редактируемого окна
-        appState.editingWindowId = windowId;
-    }
-}
-
-// Функция обновления существующего окна
-function updateWindow() {
-    if (!appState.editingWindowId) {
-        alert('Ошибка: окно для редактирования не выбрано');
-        return;
-    }
-    
-    const width = parseInt(elements.windowWidth.value);
-    const height = parseInt(elements.windowHeight.value);
-    const quantity = parseInt(elements.windowQuantity.value);
-    
-    if (!width || !height || !quantity) {
-        alert('Пожалуйста, заполните все поля корректно');
-        return;
-    }
-    
-    // Находим индекс окна в массиве
-    const windowIndex = appState.windows.findIndex(w => w.id === appState.editingWindowId);
-    
-    if (windowIndex !== -1) {
-        // Обновляем данные окна
-        appState.windows[windowIndex] = {
-            ...appState.windows[windowIndex],
-            width,
-            height,
-            quantity,
-            area: calculateWindowArea(width, height, quantity)
-        };
-        
-        // Сбрасываем форму и режим редактирования
-        cancelWindowEditing();
-        
-        // Обновляем интерфейс
-        updateUIAfterWindowsChange();
-    }
-}
-
-// Отменить редактирование окна
-function cancelWindowEditing() {
-    // Сбрасываем форму
-    elements.windowWidth.value = '';
-    elements.windowHeight.value = '';
-    elements.windowQuantity.value = '1';
-    
-    // Показываем режим добавления
-    showAddWindowMode();
-    
-    // Очищаем ID редактируемого окна
-    appState.editingWindowId = null;
-}
-
-// Переключиться в режим добавления окна
-function showAddWindowMode() {
-    if (elements.updateWindow) {
-        elements.updateWindow.classList.add('hidden');
-    }
-    if (elements.cancelWindowEdit) {
-        elements.cancelWindowEdit.classList.add('hidden');
-    }
-    elements.addWindow.classList.remove('hidden');
-}
-
-// Переключиться в режим редактирования окна
-function showEditWindowMode() {
-    elements.addWindow.classList.add('hidden');
-    if (elements.updateWindow) {
-        elements.updateWindow.classList.remove('hidden');
-    }
-    if (elements.cancelWindowEdit) {
-        elements.cancelWindowEdit.classList.remove('hidden');
-    }
 }
 
 // Initialize the application when DOM is loaded
